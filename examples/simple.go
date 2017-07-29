@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/parser"
+	// "github.com/trevex/graphql-go-subscription"
+	"github.com/trevex/graphql-go-subscription/examples/pubsub"
 	"log"
 )
+
+// GraphQL
 
 var messages []string
 
@@ -33,8 +37,9 @@ var schema, _ = graphql.NewSchema(graphql.SchemaConfig{
 	Subscription: rootSubscription,
 })
 
-// var pubsub = subscriptions.NewGoPubSub()
-// var subscriptionManager = subscriptions.NewSubscriptionManager(schema, pubsub)
+var ps = pubsub.New(4)
+
+// var subscriptionManager = subscriptions.NewSubscriptionManager(schema, ps)
 
 func main() {
 	query := `
@@ -50,7 +55,7 @@ func main() {
 
 	// newMsg := "Hello, world!"
 	// messages = append(messages, newMsg)
-	// pubsub.publish("newMessage", newMsg)
+	// ps.publish("newMessage", newMsg)
 
 	doc, err := parser.Parse(parser.ParseParams{Source: query})
 	if err != nil {
@@ -59,4 +64,5 @@ func main() {
 	o, _ := json.Marshal(doc)
 	fmt.Printf("%s \n", o)
 
+	ps.Shutdown()
 }
