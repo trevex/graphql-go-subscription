@@ -52,9 +52,12 @@ func main() {
         }
     `
 
-	subscriptionManager.Subscribe(query, func(result graphql.Result) {
-		str, _ := json.Marshal(result)
-		log.Println(str)
+	subscriptionManager.Subscribe(subscription.SubscriptionConfig{
+		Query: query,
+		Callback: func(result graphql.Result) {
+			str, _ := json.Marshal(result)
+			log.Println(str)
+		},
 	})
 
 	// Add a new message
