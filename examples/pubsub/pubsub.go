@@ -1,5 +1,10 @@
 package pubsub
 
+import (
+	"errors"
+	"github.com/trevex/graphql-go-subscription"
+)
+
 type operation int
 
 const (
@@ -38,16 +43,20 @@ func New(capacity int) *PubSub {
 	return ps
 }
 
-func (ps *PubSub) Subscribe(topics ...string) *Subscription {
+func (ps *PubSub) Subscribe(topics ...string) (subscription.Subscription, error) {
 	sub := &Subscription{
 		make(chan interface{}, ps.capacity),
 	}
 	ps.cmds <- command{op: SUBSCRIBE, topics: topics, ch: sub.ch}
-	return sub
+	return sub, nil
 }
 
-func (ps *PubSub) Unsubscribe(sub *Subscription) {
-	ps.cmds <- command{op: UNSUBSCRIBE, ch: sub.ch}
+func (ps *PubSub) Unsubscribe(sub subscription.Subscription) error {
+	if s, ok := sub.(*Subscription); ok {
+		ps.cmds <- command{op: UNSUBSCRIBE, ch: s.ch}
+		return nil
+	}
+	return errors.New("Subscription has wrong type.")
 }
 
 func (ps *PubSub) Publish(payload interface{}, topics ...string) {

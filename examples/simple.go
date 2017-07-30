@@ -2,10 +2,8 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/graphql-go/graphql"
-	"github.com/graphql-go/graphql/language/parser"
-	// "github.com/trevex/graphql-go-subscription"
+	"github.com/trevex/graphql-go-subscription"
 	"github.com/trevex/graphql-go-subscription/examples/pubsub"
 	"log"
 )
@@ -28,6 +26,9 @@ var rootSubscription = graphql.NewObject(graphql.ObjectConfig{
 	Fields: graphql.Fields{
 		"newMessage": &graphql.Field{
 			Type: graphql.String,
+			Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+				return p.Info.RootValue, nil
+			},
 		},
 	},
 })
@@ -39,7 +40,10 @@ var schema, _ = graphql.NewSchema(graphql.SchemaConfig{
 
 var ps = pubsub.New(4)
 
-// var subscriptionManager = subscriptions.NewSubscriptionManager(schema, ps)
+var subscriptionManager = subscription.NewSubscriptionManager(subscription.SubscriptionManagerConfig{
+	Schema: &schema,
+	PubSub: ps,
+})
 
 func main() {
 	query := `
@@ -48,21 +52,18 @@ func main() {
         }
     `
 
-	// subscriptionManager.subscribe(query, func(result graphql.Result) {
-	//     str, _ := json.Marshal(result)
-	//     fmt.Println(str)
-	// })
+	subscriptionManager.Subscribe(query, func(result graphql.Result) {
+		str, _ := json.Marshal(result)
+		log.Println(str)
+	})
 
-	// newMsg := "Hello, world!"
-	// messages = append(messages, newMsg)
-	// ps.publish("newMessage", newMsg)
+	// Add a new message
+	newMsg := "Hello, world!"
+	// To the store
+	messages = append(messages, newMsg)
+	// And additionally publish it as well
+	ps.Publish(newMsg, "newMessage")
 
-	doc, err := parser.Parse(parser.ParseParams{Source: query})
-	if err != nil {
-		log.Fatalf("failed to parse query: %+v", err)
-	}
-	o, _ := json.Marshal(doc)
-	fmt.Printf("%s \n", o)
-
+	// Shutdown subscription routines
 	ps.Shutdown()
 }
