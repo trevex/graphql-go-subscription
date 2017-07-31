@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// GraphQL
-
 var messages []string
 
 var rootQuery = graphql.NewObject(graphql.ObjectConfig{
