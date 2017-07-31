@@ -16,7 +16,7 @@ const (
 
 type command struct {
 	op      operation
-	topics  []string
+	topic   string
 	ch      chan interface{}
 	payload interface{}
 }
@@ -43,11 +43,11 @@ func New(capacity int) *PubSub {
 	return ps
 }
 
-func (ps *PubSub) Subscribe(topics ...string) (subscription.Subscription, error) {
+func (ps *PubSub) Subscribe(topic string, config interface{}) (subscription.Subscription, error) {
 	sub := &Subscription{
 		make(chan interface{}, ps.capacity),
 	}
-	ps.cmds <- command{op: SUBSCRIBE, topics: topics, ch: sub.ch}
+	ps.cmds <- command{op: SUBSCRIBE, topic: topic, ch: sub.ch}
 	return sub, nil
 }
 
@@ -59,8 +59,8 @@ func (ps *PubSub) Unsubscribe(sub subscription.Subscription) error {
 	return errors.New("Subscription has wrong type.")
 }
 
-func (ps *PubSub) Publish(payload interface{}, topics ...string) {
-	ps.cmds <- command{op: PUBLISH, payload: payload}
+func (ps *PubSub) Publish(topic string, payload interface{}) {
+	ps.cmds <- command{op: PUBLISH, topic: topic, payload: payload}
 }
 
 func (ps *PubSub) Shutdown() {
@@ -73,17 +73,13 @@ func (ps *PubSub) run() {
 		case SHUTDOWN:
 			break
 		case SUBSCRIBE:
-			for _, topic := range cmd.topics {
-				ps.subscribe(topic, cmd.ch)
-			}
+			ps.subscribe(cmd.topic, cmd.ch)
 		case UNSUBSCRIBE:
 			for topic, _ := range ps.subscribers[cmd.ch] {
 				ps.unsubscribe(topic, cmd.ch)
 			}
 		case PUBLISH:
-			for _, topic := range cmd.topics {
-				ps.publish(topic, cmd.payload)
-			}
+			ps.publish(cmd.topic, cmd.payload)
 		}
 	}
 }

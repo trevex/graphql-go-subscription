@@ -1,6 +1,7 @@
 package subscription
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/graphql-go/graphql"
@@ -8,7 +9,23 @@ import (
 	"github.com/graphql-go/graphql/language/parser"
 )
 
-type SetupFunction func()
+type FilterFunc func(ctx context.Context, payload interface{}) bool
+
+type TriggerConfig struct {
+	Options interface{}
+	Filter  FilterFunc
+}
+
+type TriggerMap map[string]*TriggerConfig
+
+var defaultTriggerConfig = TriggerConfig{
+	Options: nil,
+	Filter: func(ctx context.Context, payload interface{}) bool {
+		return true
+	},
+}
+
+type SetupFunction func(config *SubscriptionConfig, args map[string]interface{}, subscriptionName string)
 
 type SetupFunctionMap map[string]SetupFunction
 
@@ -26,6 +43,7 @@ type SubscriptionManager struct {
 
 type SubscriptionConfig struct {
 	Query          string
+	Context        context.Context
 	VariableValues map[string]interface{}
 	Callback       func(graphql.Result)
 }
