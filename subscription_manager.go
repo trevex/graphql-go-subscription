@@ -2,7 +2,6 @@ package subscription
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
@@ -25,48 +24,59 @@ var defaultTriggerConfig = TriggerConfig{
 	},
 }
 
-type SetupFunction func(config *SubscriptionConfig, args map[string]interface{}, subscriptionName string)
+type SetupFunction func(config *SubscriptionConfig, args map[string]interface{}, subscriptionName string) TriggerMap
 
 type SetupFunctionMap map[string]SetupFunction
 
+type SubscriptionId uint64
+
 type SubscriptionManagerConfig struct {
-	Schema         *graphql.Schema
+	Schema         graphql.Schema
 	PubSub         PubSub
 	SetupFunctions SetupFunctionMap
 }
 
 type SubscriptionManager struct {
-	schema         *graphql.Schema
+	schema         graphql.Schema
 	pubsub         PubSub
 	setupFunctions SetupFunctionMap
+	subscriptions  map[SubscriptionId][]Subscription
+	maxId          SubscriptionId
 }
 
 type SubscriptionConfig struct {
 	Query          string
 	Context        context.Context
 	VariableValues map[string]interface{}
-	Callback       func(graphql.Result)
+	OperationName  string
+	Callback       func(*graphql.Result) error
 }
 
 func NewSubscriptionManager(config SubscriptionManagerConfig) *SubscriptionManager {
-	sm := &SubscriptionManager{config.Schema, config.PubSub, config.SetupFunctions}
+	sm := &SubscriptionManager{
+		config.Schema,
+		config.PubSub,
+		config.SetupFunctions,
+		make(map[SubscriptionId][]Subscription),
+		0,
+	}
 	if sm.setupFunctions == nil {
 		sm.setupFunctions = SetupFunctionMap{}
 	}
 	return sm
 }
 
-func (sm *SubscriptionManager) Subscribe(config SubscriptionConfig) error {
+func (sm *SubscriptionManager) Subscribe(config SubscriptionConfig) (SubscriptionId, error) {
 	if config.VariableValues == nil {
 		config.VariableValues = make(map[string]interface{})
 	}
 	doc, err := parser.Parse(parser.ParseParams{Source: config.Query})
 	if err != nil {
-		return fmt.Errorf("Failed to parse query: %v", err)
+		return 0, fmt.Errorf("Failed to parse query: %v", err)
 	}
-	result := graphql.ValidateDocument(sm.schema, doc, graphql.SpecifiedRules) // TODO: add single root subscription rule
+	result := graphql.ValidateDocument(&sm.schema, doc, graphql.SpecifiedRules) // TODO: add single root subscription rule
 	if !result.IsValid || len(result.Errors) > 0 {
-		return fmt.Errorf("Validation failed, errors: %+v", result.Errors)
+		return 0, fmt.Errorf("Validation failed, errors: %+v", result.Errors)
 	}
 
 	var subscriptionName string
@@ -83,7 +93,48 @@ func (sm *SubscriptionManager) Subscribe(config SubscriptionConfig) error {
 		}
 	}
 
-	o, _ := json.Marshal(args)
-	fmt.Printf("%s \n", o)
-	return nil
+	var triggerMap TriggerMap
+	if setupFunc, ok := sm.setupFunctions[subscriptionName]; ok {
+		triggerMap = setupFunc(&config, args, subscriptionName)
+	} else {
+		triggerMap = TriggerMap{
+			subscriptionName: &defaultTriggerConfig,
+		}
+	}
+	sm.maxId++
+	subscriptionId := sm.maxId
+	sm.subscriptions[subscriptionId] = []Subscription{}
+
+	for triggerName, triggerConfig := range triggerMap {
+		sub, err := sm.pubsub.Subscribe(triggerName, triggerConfig.Options, func(payload interface{}) error {
+			if triggerConfig.Filter(config.Context, payload) {
+				result := graphql.Execute(graphql.ExecuteParams{
+					Schema:        sm.schema,
+					Root:          payload,
+					AST:           doc,
+					OperationName: config.OperationName,
+					Args:          args,
+					Context:       config.Context,
+				})
+				err := config.Callback(result)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return 0, fmt.Errorf("Subscription of trigger %v failed, error: %v", triggerName, err)
+		}
+		sm.subscriptions[subscriptionId] = append(sm.subscriptions[subscriptionId], sub)
+	}
+
+	return subscriptionId, nil
+}
+
+func (sm *SubscriptionManager) Unsubscribe(id SubscriptionId) {
+	for _, sub := range sm.subscriptions[id] {
+		sm.pubsub.Unsubscribe(sub)
+	}
+	delete(sm.subscriptions, id)
 }

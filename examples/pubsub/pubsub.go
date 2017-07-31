@@ -43,11 +43,19 @@ func New(capacity int) *PubSub {
 	return ps
 }
 
-func (ps *PubSub) Subscribe(topic string, config interface{}) (subscription.Subscription, error) {
+func (ps *PubSub) Subscribe(topic string, options interface{}, callback func(interface{}) error) (subscription.Subscription, error) {
 	sub := &Subscription{
 		make(chan interface{}, ps.capacity),
 	}
 	ps.cmds <- command{op: SUBSCRIBE, topic: topic, ch: sub.ch}
+	go (func() {
+		for payload := range sub.ch {
+			err := callback(payload)
+			if err != nil {
+				return
+			}
+		}
+	})()
 	return sub, nil
 }
 

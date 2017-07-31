@@ -1,9 +1,8 @@
 package subscription
 
-type Subscription interface {
-}
+type Subscription interface{}
 
 type PubSub interface {
-	Subscribe(topics string, config interface{}) (Subscription, error)
+	Subscribe(topic string, options interface{}, callback func(interface{}) error) (Subscription, error)
 	Unsubscribe(sub Subscription) error
 }

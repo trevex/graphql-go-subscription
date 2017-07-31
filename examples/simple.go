@@ -2,10 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/graphql-go/graphql"
 	"github.com/trevex/graphql-go-subscription"
 	"github.com/trevex/graphql-go-subscription/examples/pubsub"
-	"log"
+	"time"
 )
 
 // GraphQL
@@ -22,7 +23,7 @@ var rootQuery = graphql.NewObject(graphql.ObjectConfig{
 })
 
 var rootSubscription = graphql.NewObject(graphql.ObjectConfig{
-	Name: "RootSubscription",
+	Name: "Subscription",
 	Fields: graphql.Fields{
 		"newMessage": &graphql.Field{
 			Type: graphql.String,
@@ -41,7 +42,7 @@ var schema, _ = graphql.NewSchema(graphql.SchemaConfig{
 var ps = pubsub.New(4)
 
 var subscriptionManager = subscription.NewSubscriptionManager(subscription.SubscriptionManagerConfig{
-	Schema: &schema,
+	Schema: schema,
 	PubSub: ps,
 })
 
@@ -52,11 +53,12 @@ func main() {
         }
     `
 
-	subscriptionManager.Subscribe(subscription.SubscriptionConfig{
+	subId, _ := subscriptionManager.Subscribe(subscription.SubscriptionConfig{
 		Query: query,
-		Callback: func(result graphql.Result) {
+		Callback: func(result *graphql.Result) error {
 			str, _ := json.Marshal(result)
-			log.Println(str)
+			fmt.Printf("%s", str)
+			return nil
 		},
 	})
 
@@ -65,8 +67,14 @@ func main() {
 	// To the store
 	messages = append(messages, newMsg)
 	// And additionally publish it as well
-	ps.Publish(newMsg, "newMessage")
+	ps.Publish("newMessage", newMsg)
 
-	// Shutdown subscription routines
+	// Dirty way to wait for goroutines
+	time.Sleep(2 * time.Second)
+
+	// To clean up a subscription unsubscribe
+	subscriptionManager.Unsubscribe(subId)
+
+	// Shutdown pubsub routines
 	ps.Shutdown()
 }
