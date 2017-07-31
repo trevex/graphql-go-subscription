@@ -21,7 +21,7 @@ var rootQuery = graphql.NewObject(graphql.ObjectConfig{
 })
 
 var rootSubscription = graphql.NewObject(graphql.ObjectConfig{
-	Name: "Subscription",
+	Name: "RootSubscription",
 	Fields: graphql.Fields{
 		"newMessage": &graphql.Field{
 			Type: graphql.String,
